@@ -1,6 +1,6 @@
 # Deploy and Host Apache Airflow with Railway
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/apache-airflow-3-data-pipelines)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/apache-airflow-3-data-pipelines?referralCode=20H68q)
 
 Apache Airflow is the open-source platform for authoring, scheduling and monitoring data pipelines as Python code. This community template deploys Airflow 3 the way the project recommends for production — separate API server, scheduler, DAG processor, triggerer and Celery workers — on Railway with Postgres, Redis and bucket-backed task logs.
 
