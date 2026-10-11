@@ -1,6 +1,6 @@
 {
   "name": "Apache Airflow 3 Data Pipelines",
-  "description": "Schedule and monitor DAGs with Celery workers, Redis and Postgres. Ready to scale.",
+  "description": "Schedule and monitor DAGs with Celery workers, Redis and Postgres.",
   "category": "Automation",
   "tags": [
     "airflow",

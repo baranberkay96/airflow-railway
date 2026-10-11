@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Listing name | **Apache Airflow 3 Data Pipelines** (version label `3` = Airflow major; already part of the LISTINGS.md name, so unchanged) |
-| Description | Schedule and monitor DAGs with Celery workers, Redis and Postgres. Ready to scale. (82 chars, unchanged) |
+| Description | Schedule and monitor DAGs with Celery workers, Redis and Postgres. (82 chars, unchanged) |
 | Category | Automation |
 | Tags | airflow, data-pipelines, etl, orchestration, celery, python |
 | Base market template | `airflow` (gridalpha/airflow-railway: Airflow 3 split into api-server / scheduler / dag-processor / triggerer / worker + Redis + Postgres + Bucket logs). Its repo has **no license** → used for ideas only; every file here is newly written. `kestra-workflow-engine` and `windmill-dev` (the current "Airflow alternative" leaders) reviewed for positioning only. |
