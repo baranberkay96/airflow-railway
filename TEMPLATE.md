@@ -157,3 +157,7 @@ Pinned 2026-10-10: `apache/airflow:3.3.2` (one `FROM` line for all six Airflow s
 - The default `AIRFLOW_DAGS_GIT_URL` points at the template monorepo placeholder; it must be public at the final location before publishing (or be emptied to use the baked-in examples).
 - With several `airflow-worker` replicas, live logs of a *running* task may be requested from a different replica (all share one private DNS name). Finished-task logs come from the Bucket and are unaffected.
 - Flower (optional upstream profile) is not included; add `celery flower` as a service if Celery-level monitoring is wanted.
+
+## Deploy test findings (2026-10-11)
+
+airflow-apiserver waited for migrations while airflow-init was still building (six services build the same image in parallel) and hit its healthcheck window minutes before init finished migrating. Fix: new `migrate` role run as the api-server pre-deploy command (Airflow's migrate takes a global lock, so init migrating too is safe).

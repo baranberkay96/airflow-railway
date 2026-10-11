@@ -143,7 +143,11 @@
           "description": "Admin email.",
           "required": false
         }
-      }
+      },
+      "preDeployCommand": [
+        "/opt/railway/bin/railway-airflow migrate"
+      ],
+      "preDeployTimeoutSeconds": 900
     },
     "airflow-init": {
       "icon": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/apache-airflow.svg",

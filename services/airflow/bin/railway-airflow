@@ -55,7 +55,8 @@ wait_for_schema() {
   airflow db check-migrations --migration-wait-timeout "${timeout}"
 }
 
-run_init() {
+run_migrate() {
+  # Safe to run concurrently: airflow db migrate takes a global lock.
   local attempt=1
   until airflow db migrate; do
     [ "${attempt}" -ge 12 ] && die "airflow db migrate failed ${attempt} times"
@@ -63,6 +64,10 @@ run_init() {
     attempt=$((attempt + 1))
     sleep 10
   done
+}
+
+run_init() {
+  run_migrate
 
   require_vars AIRFLOW_ADMIN_USERNAME AIRFLOW_ADMIN_PASSWORD
   if airflow users list --output json 2>/dev/null \
@@ -87,6 +92,11 @@ normalise_db_url
 configure_dag_bundles
 
 case "${ROLE}" in
+  migrate)
+    # api-server pre-deploy step: the schema is current before the healthcheck
+    # clock starts, instead of racing airflow-init's (slower) parallel build.
+    run_migrate
+    ;;
   init)
     run_init
     ;;
