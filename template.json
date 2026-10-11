@@ -1,0 +1,760 @@
+{
+  "name": "Apache Airflow 3 Data Pipelines",
+  "description": "Schedule and monitor DAGs with Celery workers, Redis and Postgres. Ready to scale.",
+  "category": "Automation",
+  "tags": [
+    "airflow",
+    "data-pipelines",
+    "etl",
+    "orchestration",
+    "celery",
+    "python"
+  ],
+  "services": {
+    "airflow-apiserver": {
+      "icon": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/apache-airflow.svg",
+      "source": {
+        "repo": "baranberkay96/airflow-railway",
+        "rootDirectory": "/services/airflow"
+      },
+      "startCommand": "/opt/railway/bin/railway-airflow api-server",
+      "healthcheckPath": "/api/v2/monitor/health",
+      "healthcheckTimeout": 900,
+      "restartPolicyType": "ON_FAILURE",
+      "restartPolicyMaxRetries": 10,
+      "numReplicas": 1,
+      "publicDomain": true,
+      "targetPort": 8080,
+      "tcpProxy": null,
+      "volume": null,
+      "variables": {
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN": {
+          "defaultValue": "${{Postgres.DATABASE_URL}}",
+          "description": "Metadata database (Railway Postgres, private network).",
+          "required": true
+        },
+        "AIRFLOW__CELERY__BROKER_URL": {
+          "defaultValue": "${{Redis.REDIS_URL}}/0",
+          "description": "Celery broker (Railway Redis, DB 0).",
+          "required": true
+        },
+        "AIRFLOW__CORE__EXECUTION_API_SERVER_URL": {
+          "defaultValue": "http://${{airflow-apiserver.RAILWAY_PRIVATE_DOMAIN}}:8080/execution/",
+          "description": "Task Execution API that workers/triggerer call (private network).",
+          "required": true
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOGGING": {
+          "defaultValue": "True",
+          "description": "Ship task logs to the Railway Bucket.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER": {
+          "defaultValue": "s3://${{Bucket.BUCKET}}/task-logs",
+          "description": "Bucket path for task logs.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID": {
+          "defaultValue": "railway_bucket",
+          "description": "Airflow connection used for remote logs.",
+          "required": false
+        },
+        "AIRFLOW__CORE__FERNET_KEY": {
+          "defaultValue": "${{secret(43, \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_\")}}=",
+          "description": "Fernet key that encrypts connections/variables. Shared by all Airflow services; never change after first boot.",
+          "required": true
+        },
+        "AIRFLOW__API_AUTH__JWT_SECRET": {
+          "defaultValue": "${{secret(48, \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\")}}",
+          "description": "Signs task-execution JWTs. Shared by all Airflow services.",
+          "required": true
+        },
+        "AIRFLOW__API__SECRET_KEY": {
+          "defaultValue": "${{secret(48, \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\")}}",
+          "description": "API/log-server secret. Shared by all Airflow services.",
+          "required": true
+        },
+        "AIRFLOW_CONN_RAILWAY_BUCKET": {
+          "defaultValue": "{\"conn_type\": \"aws\", \"login\": \"${{Bucket.ACCESS_KEY_ID}}\", \"password\": \"${{Bucket.SECRET_ACCESS_KEY}}\", \"extra\": {\"endpoint_url\": \"${{Bucket.ENDPOINT}}\", \"region_name\": \"${{Bucket.REGION}}\", \"config_kwargs\": {\"s3\": {\"addressing_style\": \"virtual\"}}}}",
+          "description": "Airflow connection (JSON) for the Railway Bucket; used for remote task logs.",
+          "required": true
+        },
+        "AIRFLOW_DAGS_GIT_URL": {
+          "defaultValue": "https://github.com/baranberkay96/airflow-railway.git",
+          "description": "Git repo holding your DAGs (GitDagBundle). Empty = example DAGs baked into the image.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_REF": {
+          "defaultValue": "main",
+          "description": "Branch, tag or commit to track.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_SUBDIR": {
+          "defaultValue": "services/airflow/dags",
+          "description": "Folder inside the repo that contains the DAG files (empty = repo root).",
+          "required": false
+        },
+        "AIRFLOW_DAGS_REFRESH_SECS": {
+          "defaultValue": "120",
+          "description": "How often Airflow fetches new commits.",
+          "required": false
+        },
+        "PORT": {
+          "defaultValue": "8080",
+          "description": "API server port (Railway healthcheck + domain).",
+          "required": false
+        },
+        "AIRFLOW__API__PORT": {
+          "defaultValue": "8080",
+          "description": "Port uvicorn listens on.",
+          "required": false
+        },
+        "AIRFLOW__API__HOST": {
+          "defaultValue": "::",
+          "description": "Dual-stack bind so IPv4 and IPv6 private-network clients both reach the API.",
+          "required": false
+        },
+        "AIRFLOW__API__WORKERS": {
+          "defaultValue": "2",
+          "description": "Uvicorn worker processes (>1 also enables the dual-stack socket).",
+          "required": false
+        },
+        "AIRFLOW__API__BASE_URL": {
+          "defaultValue": "https://${{RAILWAY_PUBLIC_DOMAIN}}",
+          "description": "Public URL of the UI.",
+          "required": false
+        },
+        "FORWARDED_ALLOW_IPS": {
+          "defaultValue": "*",
+          "description": "Trust X-Forwarded-* from Railway's proxy (HTTPS links).",
+          "required": false
+        },
+        "AIRFLOW_ADMIN_USERNAME": {
+          "defaultValue": "admin",
+          "description": "Admin login created by airflow-init.",
+          "required": true
+        },
+        "AIRFLOW_ADMIN_PASSWORD": {
+          "defaultValue": "${{secret(24, \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\")}}",
+          "description": "Admin password (generated). Only used on first creation.",
+          "required": true
+        },
+        "AIRFLOW_ADMIN_EMAIL": {
+          "defaultValue": "admin@example.com",
+          "description": "Admin email.",
+          "required": false
+        }
+      }
+    },
+    "airflow-init": {
+      "icon": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/apache-airflow.svg",
+      "source": {
+        "repo": "baranberkay96/airflow-railway",
+        "rootDirectory": "/services/airflow"
+      },
+      "startCommand": "/opt/railway/bin/railway-airflow init",
+      "healthcheckPath": null,
+      "healthcheckTimeout": null,
+      "restartPolicyType": "ON_FAILURE",
+      "restartPolicyMaxRetries": 5,
+      "numReplicas": 1,
+      "publicDomain": false,
+      "targetPort": null,
+      "tcpProxy": null,
+      "volume": null,
+      "variables": {
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN": {
+          "defaultValue": "${{Postgres.DATABASE_URL}}",
+          "description": "Metadata database (Railway Postgres, private network).",
+          "required": true
+        },
+        "AIRFLOW__CELERY__BROKER_URL": {
+          "defaultValue": "${{Redis.REDIS_URL}}/0",
+          "description": "Celery broker (Railway Redis, DB 0).",
+          "required": true
+        },
+        "AIRFLOW__CORE__EXECUTION_API_SERVER_URL": {
+          "defaultValue": "http://${{airflow-apiserver.RAILWAY_PRIVATE_DOMAIN}}:8080/execution/",
+          "description": "Task Execution API that workers/triggerer call (private network).",
+          "required": true
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOGGING": {
+          "defaultValue": "True",
+          "description": "Ship task logs to the Railway Bucket.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER": {
+          "defaultValue": "s3://${{Bucket.BUCKET}}/task-logs",
+          "description": "Bucket path for task logs.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID": {
+          "defaultValue": "railway_bucket",
+          "description": "Airflow connection used for remote logs.",
+          "required": false
+        },
+        "AIRFLOW__CORE__FERNET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__CORE__FERNET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API_AUTH__JWT_SECRET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API_AUTH__JWT_SECRET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API__SECRET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API__SECRET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW_CONN_RAILWAY_BUCKET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_CONN_RAILWAY_BUCKET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_URL": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_URL}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_REF": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_REF}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_SUBDIR": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_SUBDIR}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_REFRESH_SECS": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_REFRESH_SECS}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_ADMIN_USERNAME": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_ADMIN_USERNAME}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW_ADMIN_PASSWORD": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_ADMIN_PASSWORD}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW_ADMIN_EMAIL": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_ADMIN_EMAIL}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        }
+      }
+    },
+    "airflow-scheduler": {
+      "icon": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/apache-airflow.svg",
+      "source": {
+        "repo": "baranberkay96/airflow-railway",
+        "rootDirectory": "/services/airflow"
+      },
+      "startCommand": "/opt/railway/bin/railway-airflow scheduler",
+      "healthcheckPath": "/health",
+      "healthcheckTimeout": 900,
+      "restartPolicyType": "ON_FAILURE",
+      "restartPolicyMaxRetries": 10,
+      "numReplicas": 1,
+      "publicDomain": false,
+      "targetPort": null,
+      "tcpProxy": null,
+      "volume": null,
+      "variables": {
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN": {
+          "defaultValue": "${{Postgres.DATABASE_URL}}",
+          "description": "Metadata database (Railway Postgres, private network).",
+          "required": true
+        },
+        "AIRFLOW__CELERY__BROKER_URL": {
+          "defaultValue": "${{Redis.REDIS_URL}}/0",
+          "description": "Celery broker (Railway Redis, DB 0).",
+          "required": true
+        },
+        "AIRFLOW__CORE__EXECUTION_API_SERVER_URL": {
+          "defaultValue": "http://${{airflow-apiserver.RAILWAY_PRIVATE_DOMAIN}}:8080/execution/",
+          "description": "Task Execution API that workers/triggerer call (private network).",
+          "required": true
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOGGING": {
+          "defaultValue": "True",
+          "description": "Ship task logs to the Railway Bucket.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER": {
+          "defaultValue": "s3://${{Bucket.BUCKET}}/task-logs",
+          "description": "Bucket path for task logs.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID": {
+          "defaultValue": "railway_bucket",
+          "description": "Airflow connection used for remote logs.",
+          "required": false
+        },
+        "AIRFLOW__CORE__FERNET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__CORE__FERNET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API_AUTH__JWT_SECRET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API_AUTH__JWT_SECRET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API__SECRET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API__SECRET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW_CONN_RAILWAY_BUCKET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_CONN_RAILWAY_BUCKET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_URL": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_URL}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_REF": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_REF}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_SUBDIR": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_SUBDIR}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_REFRESH_SECS": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_REFRESH_SECS}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "PORT": {
+          "defaultValue": "8974",
+          "description": "Scheduler health server port (Railway probes /health).",
+          "required": false
+        },
+        "AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_SERVER_PORT": {
+          "defaultValue": "8974",
+          "description": "Scheduler health server port.",
+          "required": false
+        }
+      }
+    },
+    "airflow-dag-processor": {
+      "icon": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/apache-airflow.svg",
+      "source": {
+        "repo": "baranberkay96/airflow-railway",
+        "rootDirectory": "/services/airflow"
+      },
+      "startCommand": "/opt/railway/bin/railway-airflow dag-processor",
+      "healthcheckPath": null,
+      "healthcheckTimeout": null,
+      "restartPolicyType": "ON_FAILURE",
+      "restartPolicyMaxRetries": 10,
+      "numReplicas": 1,
+      "publicDomain": false,
+      "targetPort": null,
+      "tcpProxy": null,
+      "volume": null,
+      "variables": {
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN": {
+          "defaultValue": "${{Postgres.DATABASE_URL}}",
+          "description": "Metadata database (Railway Postgres, private network).",
+          "required": true
+        },
+        "AIRFLOW__CELERY__BROKER_URL": {
+          "defaultValue": "${{Redis.REDIS_URL}}/0",
+          "description": "Celery broker (Railway Redis, DB 0).",
+          "required": true
+        },
+        "AIRFLOW__CORE__EXECUTION_API_SERVER_URL": {
+          "defaultValue": "http://${{airflow-apiserver.RAILWAY_PRIVATE_DOMAIN}}:8080/execution/",
+          "description": "Task Execution API that workers/triggerer call (private network).",
+          "required": true
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOGGING": {
+          "defaultValue": "True",
+          "description": "Ship task logs to the Railway Bucket.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER": {
+          "defaultValue": "s3://${{Bucket.BUCKET}}/task-logs",
+          "description": "Bucket path for task logs.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID": {
+          "defaultValue": "railway_bucket",
+          "description": "Airflow connection used for remote logs.",
+          "required": false
+        },
+        "AIRFLOW__CORE__FERNET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__CORE__FERNET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API_AUTH__JWT_SECRET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API_AUTH__JWT_SECRET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API__SECRET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API__SECRET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW_CONN_RAILWAY_BUCKET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_CONN_RAILWAY_BUCKET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_URL": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_URL}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_REF": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_REF}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_SUBDIR": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_SUBDIR}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_REFRESH_SECS": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_REFRESH_SECS}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        }
+      }
+    },
+    "airflow-triggerer": {
+      "icon": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/apache-airflow.svg",
+      "source": {
+        "repo": "baranberkay96/airflow-railway",
+        "rootDirectory": "/services/airflow"
+      },
+      "startCommand": "/opt/railway/bin/railway-airflow triggerer",
+      "healthcheckPath": null,
+      "healthcheckTimeout": null,
+      "restartPolicyType": "ON_FAILURE",
+      "restartPolicyMaxRetries": 10,
+      "numReplicas": 1,
+      "publicDomain": false,
+      "targetPort": null,
+      "tcpProxy": null,
+      "volume": null,
+      "variables": {
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN": {
+          "defaultValue": "${{Postgres.DATABASE_URL}}",
+          "description": "Metadata database (Railway Postgres, private network).",
+          "required": true
+        },
+        "AIRFLOW__CELERY__BROKER_URL": {
+          "defaultValue": "${{Redis.REDIS_URL}}/0",
+          "description": "Celery broker (Railway Redis, DB 0).",
+          "required": true
+        },
+        "AIRFLOW__CORE__EXECUTION_API_SERVER_URL": {
+          "defaultValue": "http://${{airflow-apiserver.RAILWAY_PRIVATE_DOMAIN}}:8080/execution/",
+          "description": "Task Execution API that workers/triggerer call (private network).",
+          "required": true
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOGGING": {
+          "defaultValue": "True",
+          "description": "Ship task logs to the Railway Bucket.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER": {
+          "defaultValue": "s3://${{Bucket.BUCKET}}/task-logs",
+          "description": "Bucket path for task logs.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID": {
+          "defaultValue": "railway_bucket",
+          "description": "Airflow connection used for remote logs.",
+          "required": false
+        },
+        "AIRFLOW__CORE__FERNET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__CORE__FERNET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API_AUTH__JWT_SECRET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API_AUTH__JWT_SECRET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API__SECRET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API__SECRET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW_CONN_RAILWAY_BUCKET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_CONN_RAILWAY_BUCKET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_URL": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_URL}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_REF": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_REF}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_SUBDIR": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_SUBDIR}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_REFRESH_SECS": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_REFRESH_SECS}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        }
+      }
+    },
+    "airflow-worker": {
+      "icon": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/apache-airflow.svg",
+      "source": {
+        "repo": "baranberkay96/airflow-railway",
+        "rootDirectory": "/services/airflow"
+      },
+      "startCommand": "/opt/railway/bin/railway-airflow worker",
+      "healthcheckPath": null,
+      "healthcheckTimeout": null,
+      "restartPolicyType": "ON_FAILURE",
+      "restartPolicyMaxRetries": 10,
+      "numReplicas": 1,
+      "publicDomain": false,
+      "targetPort": null,
+      "tcpProxy": null,
+      "volume": null,
+      "variables": {
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN": {
+          "defaultValue": "${{Postgres.DATABASE_URL}}",
+          "description": "Metadata database (Railway Postgres, private network).",
+          "required": true
+        },
+        "AIRFLOW__CELERY__BROKER_URL": {
+          "defaultValue": "${{Redis.REDIS_URL}}/0",
+          "description": "Celery broker (Railway Redis, DB 0).",
+          "required": true
+        },
+        "AIRFLOW__CORE__EXECUTION_API_SERVER_URL": {
+          "defaultValue": "http://${{airflow-apiserver.RAILWAY_PRIVATE_DOMAIN}}:8080/execution/",
+          "description": "Task Execution API that workers/triggerer call (private network).",
+          "required": true
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOGGING": {
+          "defaultValue": "True",
+          "description": "Ship task logs to the Railway Bucket.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER": {
+          "defaultValue": "s3://${{Bucket.BUCKET}}/task-logs",
+          "description": "Bucket path for task logs.",
+          "required": false
+        },
+        "AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID": {
+          "defaultValue": "railway_bucket",
+          "description": "Airflow connection used for remote logs.",
+          "required": false
+        },
+        "AIRFLOW__CORE__FERNET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__CORE__FERNET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API_AUTH__JWT_SECRET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API_AUTH__JWT_SECRET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW__API__SECRET_KEY": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW__API__SECRET_KEY}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": true
+        },
+        "AIRFLOW_CONN_RAILWAY_BUCKET": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_CONN_RAILWAY_BUCKET}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_URL": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_URL}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_REF": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_REF}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_GIT_SUBDIR": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_GIT_SUBDIR}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW_DAGS_REFRESH_SECS": {
+          "defaultValue": "${{airflow-apiserver.AIRFLOW_DAGS_REFRESH_SECS}}",
+          "description": "Same value as on airflow-apiserver.",
+          "required": false
+        },
+        "AIRFLOW__CELERY__WORKER_CONCURRENCY": {
+          "defaultValue": "8",
+          "description": "Task slots per worker replica.",
+          "required": false
+        },
+        "RAILWAY_DEPLOYMENT_DRAINING_SECONDS": {
+          "defaultValue": "300",
+          "description": "Time running tasks get to finish on redeploy (Celery warm shutdown).",
+          "required": false
+        }
+      }
+    },
+    "Postgres": {
+      "icon": "https://devicons.railway.app/i/postgresql.svg",
+      "source": {
+        "image": "ghcr.io/railwayapp-templates/postgres-ssl:18"
+      },
+      "startCommand": null,
+      "healthcheckPath": null,
+      "healthcheckTimeout": null,
+      "restartPolicyType": "ON_FAILURE",
+      "restartPolicyMaxRetries": 10,
+      "publicDomain": false,
+      "targetPort": null,
+      "tcpProxy": null,
+      "volume": {
+        "mountPath": "/var/lib/postgresql/data"
+      },
+      "variables": {
+        "PGDATA": {
+          "defaultValue": "/var/lib/postgresql/data/pgdata",
+          "description": "Location where the database will be initialized",
+          "required": true
+        },
+        "PGHOST": {
+          "defaultValue": "${{RAILWAY_PRIVATE_DOMAIN}}",
+          "description": "Railway Private Domain Name.",
+          "required": true
+        },
+        "PGPORT": {
+          "defaultValue": "5432",
+          "description": "Port to connect to Postgres.",
+          "required": true
+        },
+        "PGUSER": {
+          "defaultValue": "${{ POSTGRES_USER }}",
+          "description": "Required variable for Data panel",
+          "required": true
+        },
+        "PGDATABASE": {
+          "defaultValue": "${{POSTGRES_DB}}",
+          "description": "Required variable for the data panel.",
+          "required": true
+        },
+        "PGPASSWORD": {
+          "defaultValue": "${{POSTGRES_PASSWORD}}",
+          "description": "Required variable for Data panel",
+          "required": true
+        },
+        "POSTGRES_DB": {
+          "defaultValue": "railway",
+          "description": "Default database created when image is started.",
+          "required": true
+        },
+        "DATABASE_URL": {
+          "defaultValue": "postgresql://${{PGUSER}}:${{POSTGRES_PASSWORD}}@${{RAILWAY_PRIVATE_DOMAIN}}:5432/${{PGDATABASE}}",
+          "description": "URL to connect to Postgres database.",
+          "required": true
+        },
+        "POSTGRES_USER": {
+          "defaultValue": "postgres",
+          "description": "User to connect to Postgres DB",
+          "required": true
+        },
+        "SSL_CERT_DAYS": {
+          "defaultValue": "820",
+          "description": "SSL certificate expiry in days.",
+          "required": false
+        },
+        "POSTGRES_PASSWORD": {
+          "defaultValue": "${{ secret(32, \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\") }}",
+          "description": "Password to connect to DB",
+          "required": true
+        },
+        "RAILWAY_DEPLOYMENT_DRAINING_SECONDS": {
+          "defaultValue": "60",
+          "description": "Allow Postgres to cleanly shut down",
+          "required": true
+        }
+      }
+    },
+    "Redis": {
+      "icon": "https://cdn.sanity.io/images/sy1jschh/production/0ce0bfdcfbdbf69662b1116671f97c2dd788b655-157x157.svg",
+      "source": {
+        "image": "redis:8.2"
+      },
+      "startCommand": "/bin/sh -c \"rm -rf $RAILWAY_VOLUME_MOUNT_PATH/lost+found/ && exec docker-entrypoint.sh redis-server --requirepass $REDIS_PASSWORD --save 60 1 --dir $RAILWAY_VOLUME_MOUNT_PATH\"",
+      "healthcheckPath": null,
+      "healthcheckTimeout": null,
+      "restartPolicyType": "ON_FAILURE",
+      "restartPolicyMaxRetries": 10,
+      "publicDomain": false,
+      "targetPort": null,
+      "tcpProxy": null,
+      "volume": {
+        "mountPath": "/data"
+      },
+      "variables": {
+        "REDISHOST": {
+          "defaultValue": "${{RAILWAY_PRIVATE_DOMAIN}}",
+          "description": "Private network hostname of the Redis service, only resolvable from services in the same environment",
+          "required": true
+        },
+        "REDISPORT": {
+          "defaultValue": "6379",
+          "description": "Port that Redis listens on",
+          "required": true
+        },
+        "REDISUSER": {
+          "defaultValue": "default",
+          "description": "Username for authenticating with Redis",
+          "required": true
+        },
+        "REDIS_URL": {
+          "defaultValue": "redis://${{ REDISUSER }}:${{ REDIS_PASSWORD }}@${{ REDISHOST }}:${{ REDISPORT }}",
+          "description": "Connection string for connecting to Redis using the private network",
+          "required": true
+        },
+        "REDISPASSWORD": {
+          "defaultValue": "${{REDIS_PASSWORD}}",
+          "description": "Alias of REDIS_PASSWORD for clients that expect the unseparated name",
+          "required": true
+        },
+        "REDIS_PASSWORD": {
+          "defaultValue": "${{ secret(32, \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\") }}",
+          "description": "Randomly generated password for authenticating with Redis",
+          "required": true
+        }
+      }
+    }
+  },
+  "buckets": [
+    "Bucket"
+  ]
+}

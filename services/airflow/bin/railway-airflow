@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# Role launcher for Apache Airflow 3 on Railway.
+#
+#   railway-airflow init           one-shot: migrate metadata DB, create admin user, exit
+#   railway-airflow api-server     UI + REST API + task execution API (public)
+#   railway-airflow scheduler
+#   railway-airflow dag-processor
+#   railway-airflow triggerer
+#   railway-airflow worker         Celery worker
+#
+# Every role except `init` waits until the metadata schema is current, because
+# Railway starts all services of a template at the same time.
+set -euo pipefail
+
+ROLE="${1:-}"
+[ $# -gt 0 ] && shift
+
+log() { echo "[railway-airflow] $*"; }
+die() { log "FATAL: $*" >&2; exit 78; }
+
+require_vars() {
+  local name
+  for name in "$@"; do
+    [ -n "${!name:-}" ] || die "variable ${name} is not set"
+  done
+}
+
+normalise_db_url() {
+  # SQLAlchemy accepts postgresql:// (psycopg2) but not the legacy postgres:// scheme.
+  local url="${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}"
+  case "${url}" in
+    postgres://*) url="postgresql://${url#postgres://}" ;;
+  esac
+  export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="${url}"
+  if [ -z "${AIRFLOW__CELERY__RESULT_BACKEND:-}" ]; then
+    export AIRFLOW__CELERY__RESULT_BACKEND="db+${url}"
+  fi
+}
+
+configure_dag_bundles() {
+  if [ -n "${AIRFLOW__DAG_PROCESSOR__DAG_BUNDLE_CONFIG_LIST:-}" ]; then
+    log "DAG bundles: using AIRFLOW__DAG_PROCESSOR__DAG_BUNDLE_CONFIG_LIST as given"
+  elif [ -n "${AIRFLOW_DAGS_GIT_URL:-}" ]; then
+    AIRFLOW__DAG_PROCESSOR__DAG_BUNDLE_CONFIG_LIST="$(python /opt/railway/railway_airflow/bundles.py)"
+    export AIRFLOW__DAG_PROCESSOR__DAG_BUNDLE_CONFIG_LIST
+    log "DAG bundles: git ${AIRFLOW_DAGS_GIT_URL} @ ${AIRFLOW_DAGS_GIT_REF:-main} /${AIRFLOW_DAGS_GIT_SUBDIR:-}"
+  else
+    log "DAG bundles: AIRFLOW_DAGS_GIT_URL empty, using example DAGs baked into the image"
+  fi
+}
+
+wait_for_schema() {
+  local timeout="${AIRFLOW_MIGRATION_WAIT_SECONDS:-900}"
+  log "waiting up to ${timeout}s for airflow-init to migrate the metadata database"
+  airflow db check-migrations --migration-wait-timeout "${timeout}"
+}
+
+run_init() {
+  local attempt=1
+  until airflow db migrate; do
+    [ "${attempt}" -ge 12 ] && die "airflow db migrate failed ${attempt} times"
+    log "airflow db migrate failed (attempt ${attempt}); retrying in 10s"
+    attempt=$((attempt + 1))
+    sleep 10
+  done
+
+  require_vars AIRFLOW_ADMIN_USERNAME AIRFLOW_ADMIN_PASSWORD
+  if airflow users list --output json 2>/dev/null \
+      | python -c 'import json, os, sys; u = os.environ["AIRFLOW_ADMIN_USERNAME"]; sys.exit(0 if any(r.get("username") == u for r in json.load(sys.stdin)) else 1)'; then
+    log "admin user '${AIRFLOW_ADMIN_USERNAME}' already exists; password left unchanged"
+  else
+    airflow users create \
+      --role Admin \
+      --username "${AIRFLOW_ADMIN_USERNAME}" \
+      --password "${AIRFLOW_ADMIN_PASSWORD}" \
+      --email "${AIRFLOW_ADMIN_EMAIL:-admin@example.com}" \
+      --firstname "${AIRFLOW_ADMIN_FIRSTNAME:-Airflow}" \
+      --lastname "${AIRFLOW_ADMIN_LASTNAME:-Admin}"
+    log "admin user '${AIRFLOW_ADMIN_USERNAME}' created"
+  fi
+  log "init finished"
+}
+
+require_vars AIRFLOW__DATABASE__SQL_ALCHEMY_CONN AIRFLOW__CORE__FERNET_KEY \
+  AIRFLOW__API_AUTH__JWT_SECRET AIRFLOW__API__SECRET_KEY
+normalise_db_url
+configure_dag_bundles
+
+case "${ROLE}" in
+  init)
+    run_init
+    ;;
+  api-server)
+    wait_for_schema
+    if [ -z "${AIRFLOW__API__BASE_URL:-}" ] && [ -n "${RAILWAY_PUBLIC_DOMAIN:-}" ]; then
+      export AIRFLOW__API__BASE_URL="https://${RAILWAY_PUBLIC_DOMAIN}"
+    fi
+    exec /usr/bin/dumb-init -- /entrypoint api-server --proxy-headers "$@"
+    ;;
+  scheduler)
+    wait_for_schema
+    exec /usr/bin/dumb-init -- /entrypoint scheduler "$@"
+    ;;
+  dag-processor)
+    wait_for_schema
+    exec /usr/bin/dumb-init -- /entrypoint dag-processor "$@"
+    ;;
+  triggerer)
+    wait_for_schema
+    exec /usr/bin/dumb-init -- /entrypoint triggerer "$@"
+    ;;
+  worker)
+    wait_for_schema
+    # Celery performs its own warm shutdown; do not signal the whole process group.
+    export DUMB_INIT_SETSID=0
+    exec /usr/bin/dumb-init -- /entrypoint celery worker "$@"
+    ;;
+  *)
+    die "unknown role '${ROLE}' (expected init|api-server|scheduler|dag-processor|triggerer|worker)"
+    ;;
+esac
